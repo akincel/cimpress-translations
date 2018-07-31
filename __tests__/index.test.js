@@ -15,6 +15,7 @@ const TEST_URL = "http://myservice.com";
 const TEST_ID = "TEST_ID";
 const TEST_LANGUAGE = "English";
 const TEST_REPLY = "TEST_REPLY";
+const TEST_STRUCTURE = { testKey: "testValue" };
 const client = new CimpressTranslationsClient(TEST_URL, () => null);
 
 describe("for CimpressTranslationsClient", () => {
@@ -98,6 +99,70 @@ describe("for CimpressTranslationsClient", () => {
       } catch (err) {
         assert.equal(err.name, "ENOLANG");
       }
+    });
+  });
+
+  describe("for patchStructure()", () => {
+    afterEach(nock.cleanAll);
+
+    it("returns the successful response", async () => {
+      let n = nock(TEST_URL)
+        .patch(route => route.match(pope(API.v1ServicesIdStructure, {id: TEST_ID})), TEST_STRUCTURE)
+        .reply(200, TEST_REPLY);
+
+      let response = await client.patchStructure(TEST_ID, TEST_STRUCTURE);
+      assert.equal(response, TEST_REPLY);
+    });
+  });
+
+  describe("for removeKeysFromStruture()", () => {
+    afterEach(nock.cleanAll);
+
+    it("returns the successful response and validates that only remove patch operations were included", async () => {
+      let remoteBlob = {
+        data: {
+          topLevelKey: "topLevelValue",
+          topLevelObject: {
+            secondLevelKey: "secondLevelValue"
+          }
+        },
+        blobId: "eng"
+      };
+
+      let localBlob = {
+        data: {
+          anotherTopLevelKey: "anotherTopLevelValue",
+          topLevelObject: {
+            anotherSecondLevelKey: "anotherSecondLevelValue"
+          }
+        },
+        blobId: "eng"
+      };
+
+      let expectedStructurePatches = [
+        {
+          op: "remove",
+          path: "/topLevelObject/secondLevelKey"
+        },
+        {
+          op: "remove",
+          path: "/topLevelKey"
+        }
+      ];
+
+      let getBlobMock = nock(TEST_URL)
+        .get(route => route.match(pope(API.v1ServicesIdLanguage, { id: TEST_ID })))
+        .reply(200, remoteBlob);
+
+      let patchStructureMock = nock(TEST_URL)
+        .patch(route => route.match(pope(API.v1ServicesIdStructure, {id: TEST_ID})), body => {
+          assert.deepEqual(body, expectedStructurePatches);
+          return true;
+        })
+        .reply(200, TEST_REPLY);
+
+      let response = await client.removeKeysFromStructure(TEST_ID, localBlob);
+      assert.equal(response, TEST_REPLY);
     });
   });
 });
